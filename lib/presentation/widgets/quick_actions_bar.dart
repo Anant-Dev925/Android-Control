@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:android_control/presentation/cubit/chat_cubit.dart';
 
 class QuickActionsBar extends StatelessWidget {
-  final Function(QuickAction) onAction;
+  final Function(String) onPasteToChat;
 
   const QuickActionsBar({
     super.key,
-    required this.onAction,
+    required this.onPasteToChat,
   });
 
   @override
@@ -23,27 +22,22 @@ class QuickActionsBar extends StatelessWidget {
             _QuickActionChip(
               icon: Icons.folder_open,
               label: 'List Files',
-              onTap: () => onAction(QuickAction.listFiles),
+              onTap: () => onPasteToChat('List files in /sdcard/Download'),
             ),
             _QuickActionChip(
               icon: Icons.description,
               label: 'Read File',
-              onTap: () => onAction(QuickAction.readTest),
+              onTap: () => onPasteToChat('Read /sdcard/test.txt'),
             ),
             _QuickActionChip(
               icon: Icons.create_new_folder,
               label: 'New Folder',
-              onTap: () => onAction(QuickAction.createFolder),
+              onTap: () => onPasteToChat('Create folder /sdcard/TestFolder'),
             ),
             _QuickActionChip(
-              icon: Icons.sync,
-              label: 'Reconnect',
-              onTap: () => onAction(QuickAction.reconnect),
-            ),
-            _QuickActionChip(
-              icon: Icons.info_outline,
-              label: 'Status',
-              onTap: () => onAction(QuickAction.checkStatus),
+              icon: Icons.summarize,
+              label: 'Read PDF',
+              onTap: () => onPasteToChat('Read /sdcard/Download/NGA.pdf'),
             ),
           ],
         ),

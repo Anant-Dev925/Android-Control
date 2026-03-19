@@ -23,7 +23,6 @@ class ChatBubble extends StatelessWidget {
   }
 
   String _detectLanguage(String code) {
-    // Simple language detection based on common patterns
     if (code.contains('import ') && (code.contains('from ') || code.contains('def '))) {
       return 'python';
     }
@@ -54,15 +53,13 @@ class ChatBubble extends StatelessWidget {
     int lastEnd = 0;
 
     for (final match in codeBlockRegex.allMatches(content)) {
-      // Add text before code block
       if (match.start > lastEnd) {
         final text = content.substring(lastEnd, match.start).trim();
         if (text.isNotEmpty) {
-          widgets.add(_buildText(text));
+          widgets.add(_buildRichText(text));
         }
       }
 
-      // Get language and code
       final language = match.group(1)?.isNotEmpty == true 
           ? match.group(1)! 
           : _detectLanguage(match.group(2) ?? '');
@@ -72,42 +69,109 @@ class ChatBubble extends StatelessWidget {
       lastEnd = match.end;
     }
 
-    // Add remaining text
     if (lastEnd < content.length) {
       final text = content.substring(lastEnd).trim();
       if (text.isNotEmpty) {
-        widgets.add(_buildText(text));
+        widgets.add(_buildRichText(text));
       }
     }
 
-    // If no code blocks found, just show the content as text
     if (widgets.isEmpty && content.isNotEmpty) {
-      widgets.add(_buildText(content));
+      widgets.add(_buildRichText(content));
     }
 
     return widgets;
   }
 
-  Widget _buildText(String text) {
-    return Text(
-      text,
-      style: const TextStyle(
-        height: 1.4,
+  Widget _buildRichText(String text) {
+    final spans = _parseMarkdown(text);
+    return RichText(
+      text: TextSpan(
+        children: spans,
+        style: const TextStyle(
+          color: Colors.black87,
+          height: 1.4,
+          fontSize: 15,
+        ),
       ),
     );
+  }
+
+  List<InlineSpan> _parseMarkdown(String text) {
+    final List<InlineSpan> spans = [];
+    final boldRegex = RegExp(r'\*\*(.+?)\*\*');
+    final italicRegex = RegExp(r'_(.+?)_');
+    final codeRegex = RegExp(r'`(.+?)`');
+
+    int lastEnd = 0;
+    final allMatches = <_MarkdownMatch>[];
+
+    for (final match in boldRegex.allMatches(text)) {
+      allMatches.add(_MarkdownMatch(match.start, match.end, 'bold', match.group(1)!));
+    }
+    for (final match in italicRegex.allMatches(text)) {
+      allMatches.add(_MarkdownMatch(match.start, match.end, 'italic', match.group(1)!));
+    }
+    for (final match in codeRegex.allMatches(text)) {
+      allMatches.add(_MarkdownMatch(match.start, match.end, 'code', match.group(1)!));
+    }
+
+    allMatches.sort((a, b) => a.start.compareTo(b.start));
+
+    for (final match in allMatches) {
+      if (match.start > lastEnd) {
+        spans.add(TextSpan(text: text.substring(lastEnd, match.start)));
+      }
+
+      switch (match.type) {
+        case 'bold':
+          spans.add(TextSpan(
+            text: match.content,
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ));
+          break;
+        case 'italic':
+          spans.add(TextSpan(
+            text: match.content,
+            style: const TextStyle(fontStyle: FontStyle.italic),
+          ));
+          break;
+        case 'code':
+          spans.add(TextSpan(
+            text: match.content,
+            style: TextStyle(
+              fontFamily: 'monospace',
+              backgroundColor: Colors.grey.shade200,
+              color: Colors.black87,
+            ),
+          ));
+          break;
+      }
+
+      lastEnd = match.end;
+    }
+
+    if (lastEnd < text.length) {
+      spans.add(TextSpan(text: text.substring(lastEnd)));
+    }
+
+    if (spans.isEmpty) {
+      spans.add(TextSpan(text: text));
+    }
+
+    return spans;
   }
 
   Widget _buildCodeBlock(String code, String language) {
     return Container(
       margin: const EdgeInsets.only(top: 8, bottom: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFF282C34), // Atom one dark background
+        color: const Color(0xFF282C34),
         borderRadius: BorderRadius.circular(8),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Header with language and copy button
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: const BoxDecoration(
@@ -134,26 +198,15 @@ class ChatBubble extends StatelessWidget {
                   },
                   child: const Row(
                     children: [
-                      Icon(
-                        Icons.copy,
-                        size: 14,
-                        color: Color(0xFFABB2BF),
-                      ),
+                      Icon(Icons.copy, size: 14, color: Color(0xFFABB2BF)),
                       SizedBox(width: 4),
-                      Text(
-                        'Copy',
-                        style: TextStyle(
-                          color: Color(0xFFABB2BF),
-                          fontSize: 11,
-                        ),
-                      ),
+                      Text('Copy', style: TextStyle(color: Color(0xFFABB2BF), fontSize: 11)),
                     ],
                   ),
                 ),
               ],
             ),
           ),
-          // Code content with syntax highlighting
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.all(12),
@@ -161,11 +214,7 @@ class ChatBubble extends StatelessWidget {
               code,
               language: language,
               theme: atomOneDarkTheme,
-              textStyle: const TextStyle(
-                fontFamily: 'monospace',
-                fontSize: 13,
-                height: 1.4,
-              ),
+              textStyle: const TextStyle(fontFamily: 'monospace', fontSize: 13, height: 1.4),
             ),
           ),
         ],
@@ -176,7 +225,7 @@ class ChatBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (message.isLoading) {
-      return _buildLoadingBubble(context);
+      return _buildLoadingBubble();
     }
 
     if (message.error != null) {
@@ -185,7 +234,7 @@ class ChatBubble extends StatelessWidget {
 
     final isUser = message.isUser;
     final contentWidgets = isUser 
-        ? [_buildText(message.content)]
+        ? [_buildRichText(message.content)]
         : _parseContent(message.content);
 
     return Align(
@@ -214,10 +263,7 @@ class ChatBubble extends StatelessWidget {
                   runSpacing: 4,
                   children: message.toolCalls!.map((tool) {
                     return Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 4,
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: Theme.of(context).colorScheme.secondaryContainer,
                         borderRadius: BorderRadius.circular(8),
@@ -225,33 +271,35 @@ class ChatBubble extends StatelessWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
-                            Icons.build,
-                            size: 12,
-                            color: Theme.of(context).colorScheme.onSecondaryContainer,
-                          ),
+                          Icon(Icons.build, size: 12, color: Theme.of(context).colorScheme.onSecondaryContainer),
                           const SizedBox(width: 4),
-                          Text(
-                            tool.name,
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Theme.of(context).colorScheme.onSecondaryContainer,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
+                          Text(tool.name, style: TextStyle(fontSize: 11, color: Theme.of(context).colorScheme.onSecondaryContainer, fontWeight: FontWeight.w500)),
                         ],
                       ),
                     );
                   }).toList(),
                 ),
               ),
+            if (!isUser && (message.toolCalls == null || message.toolCalls!.isEmpty))
+              const SizedBox.shrink(),
+            // Copy button for all messages
+            Align(
+              alignment: Alignment.bottomRight,
+              child: GestureDetector(
+                onTap: () => _copyToClipboard(context, message.content),
+                child: const Padding(
+                  padding: EdgeInsets.only(top: 8),
+                  child: Icon(Icons.copy, size: 18, color: Colors.grey),
+                ),
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildLoadingBubble(BuildContext context) {
+  Widget _buildLoadingBubble() {
     return const Align(
       alignment: Alignment.centerLeft,
       child: Padding(
@@ -288,18 +336,12 @@ class ChatBubble extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              Icons.error_outline,
-              color: Theme.of(context).colorScheme.onErrorContainer,
-              size: 20,
-            ),
+            Icon(Icons.error_outline, color: Theme.of(context).colorScheme.onErrorContainer, size: 20),
             const SizedBox(width: 8),
             Flexible(
               child: Text(
                 message.error!,
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onErrorContainer,
-                ),
+                style: TextStyle(color: Theme.of(context).colorScheme.onErrorContainer),
               ),
             ),
           ],
@@ -307,4 +349,13 @@ class ChatBubble extends StatelessWidget {
       ),
     );
   }
+}
+
+class _MarkdownMatch {
+  final int start;
+  final int end;
+  final String type;
+  final String content;
+
+  _MarkdownMatch(this.start, this.end, this.type, this.content);
 }

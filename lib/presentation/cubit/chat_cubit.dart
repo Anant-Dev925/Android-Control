@@ -49,36 +49,4 @@ class ChatCubit extends Cubit<List<ChatMessage>> {
   void clearMessages() {
     emit([]);
   }
-
-  Future<void> executeQuickAction(QuickAction action) async {
-    String message;
-    
-    switch (action) {
-      case QuickAction.listFiles:
-        message = 'List files in /sdcard/Download';
-        break;
-      case QuickAction.readTest:
-        message = 'Read file /sdcard/test.txt';
-        break;
-      case QuickAction.createFolder:
-        message = 'Create folder /sdcard/TestFolder';
-        break;
-      case QuickAction.reconnect:
-        message = 'Reconnect to Android';
-        break;
-      case QuickAction.checkStatus:
-        message = 'Check Android status';
-        break;
-    }
-    
-    await sendMessage(message);
-  }
-}
-
-enum QuickAction {
-  listFiles,
-  readTest,
-  createFolder,
-  reconnect,
-  checkStatus,
 }

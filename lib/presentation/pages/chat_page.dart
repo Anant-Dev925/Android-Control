@@ -49,6 +49,14 @@ class _ChatPageState extends State<ChatPage> {
     });
   }
 
+  void _pasteToChat(String text) {
+    _controller.text = text;
+    _controller.selection = TextSelection.fromPosition(
+      TextPosition(offset: _controller.text.length),
+    );
+    _focusNode.requestFocus();
+  }
+
   void _sendMessage() {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
@@ -83,14 +91,8 @@ class _ChatPageState extends State<ChatPage> {
       ),
       body: Column(
         children: [
-          BlocBuilder<ChatCubit, List<dynamic>>(
-            builder: (context, messages) {
-              return QuickActionsBar(
-                onAction: (action) {
-                  context.read<ChatCubit>().executeQuickAction(action);
-                },
-              );
-            },
+          QuickActionsBar(
+            onPasteToChat: _pasteToChat,
           ),
           Expanded(
             child: BlocConsumer<ChatCubit, List<dynamic>>(
@@ -138,33 +140,34 @@ class _ChatPageState extends State<ChatPage> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            Expanded(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(
-                    minHeight: 40,
-                    maxHeight: 120,
-                  ),
-                  child: Scrollbar(
-                    thumbVisibility: true,
-                    child: TextField(
-                      controller: _controller,
-                      focusNode: _focusNode,
-                      decoration: const InputDecoration(
-                        hintText: 'Ask me anything...',
-                        border: OutlineInputBorder(),
-                        contentPadding: EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 8,
-                        ),
+            Flexible(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  minHeight: 40,
+                  maxHeight: 120,
+                ),
+                child: Scrollbar(
+                  thumbVisibility: true,
+                  child: TextField(
+                    controller: _controller,
+                    focusNode: _focusNode,
+                    decoration: const InputDecoration(
+                      hintText: 'Ask me anything...',
+                      border: OutlineInputBorder(),
+                      contentPadding: EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
                       ),
-                      textInputAction: TextInputAction.newline,
-                      keyboardType: TextInputType.multiline,
-                      onSubmitted: (_) => _sendMessage(),
-                      maxLines: null,
-                      textCapitalization: TextCapitalization.sentences,
                     ),
+                    textInputAction: TextInputAction.newline,
+                    keyboardType: TextInputType.multiline,
+                    onSubmitted: (_) => _sendMessage(),
+                    maxLines: 5,
+                    minLines: 1,
+                    textCapitalization: TextCapitalization.sentences,
                   ),
                 ),
+              ),
             ),
             const SizedBox(width: 8),
             BlocBuilder<ChatCubit, List<dynamic>>(
