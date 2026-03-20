@@ -2,6 +2,7 @@ import 'package:get_it/get_it.dart';
 import 'package:android_control/data/services/api_service.dart';
 import 'package:android_control/presentation/cubit/chat_cubit.dart';
 import 'package:android_control/presentation/cubit/connection_cubit.dart';
+import 'package:android_control/presentation/cubit/session_cubit.dart';
 
 final GetIt sl = GetIt.instance;
 
@@ -18,5 +19,9 @@ Future<void> initServiceLocator() async {
 
   sl.registerFactory<ChatCubit>(
     () => ChatCubit(apiService: sl<ApiService>()),
+  );
+
+  sl.registerFactory<SessionCubit>(
+    () => SessionCubit(apiService: sl<ApiService>()),
   );
 }
