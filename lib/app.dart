@@ -6,6 +6,8 @@ import 'package:android_control/presentation/cubit/chat_cubit.dart';
 import 'package:android_control/presentation/cubit/connection_cubit.dart';
 import 'package:android_control/presentation/cubit/session_cubit.dart';
 import 'package:android_control/presentation/pages/chat_page.dart';
+import 'package:android_control/presentation/pages/server_offline_page.dart';
+import 'package:android_control/data/models/connection_state_model.dart' as conn;
 
 class AndroidControlApp extends StatelessWidget {
   const AndroidControlApp({super.key});
@@ -30,7 +32,14 @@ class AndroidControlApp extends StatelessWidget {
         theme: AppTheme.lightTheme,
         darkTheme: AppTheme.darkTheme,
         themeMode: ThemeMode.system,
-        home: const ChatPage(),
+        home: BlocBuilder<ConnectionCubit, conn.ConnectionState>(
+          builder: (context, state) {
+            if (state.serverStatus == conn.ConnectionStatus.connected) {
+              return const ChatPage();
+            }
+            return const ServerOfflinePage();
+          },
+        ),
       ),
     );
   }
