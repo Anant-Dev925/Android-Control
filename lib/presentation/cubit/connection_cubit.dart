@@ -2,14 +2,20 @@ import 'dart:async';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:android_control/data/models/connection_state_model.dart';
 import 'package:android_control/data/services/api_service.dart';
+import 'package:android_control/data/services/socket_service.dart';
 
 class ConnectionCubit extends Cubit<ConnectionState> {
   final ApiService _apiService;
-  Timer? _checkTimer;
+  final SocketService _socketService;
+  Timer? _fallbackTimer;
+  StreamSubscription<bool>? _serverSubscription;
+  StreamSubscription<bool>? _androidSubscription;
 
   ConnectionCubit({
     required ApiService apiService,
+    required SocketService socketService,
   })  : _apiService = apiService,
+        _socketService = socketService,
         super(const ConnectionState());
 
   Future<void> initialize() async {
@@ -18,11 +24,45 @@ class ConnectionCubit extends Cubit<ConnectionState> {
       serverMessage: 'Connecting...',
     ));
 
+    _setupSocketListeners();
+
     await checkConnection();
     
-    // Check connection every 10 seconds
-    _checkTimer = Timer.periodic(const Duration(seconds: 10), (_) {
-      checkConnection();
+    _startFallbackCheck();
+  }
+
+  void _setupSocketListeners() {
+    _serverSubscription = _socketService.serverStatusStream.listen((connected) {
+      if (connected) {
+        emit(state.copyWith(
+          serverStatus: ConnectionStatus.connected,
+          serverMessage: 'Server connected',
+        ));
+        _socketService.requestStatus();
+      } else {
+        emit(state.copyWith(
+          serverStatus: ConnectionStatus.disconnected,
+          serverMessage: 'Server disconnected',
+        ));
+      }
+    });
+
+    _androidSubscription = _socketService.androidStatusStream.listen((connected) {
+      emit(state.copyWith(
+        androidStatus: connected ? ConnectionStatus.connected : ConnectionStatus.disconnected,
+        androidMessage: connected ? 'Android connected' : 'Android not connected',
+      ));
+    });
+
+    _socketService.connect();
+  }
+
+  void _startFallbackCheck() {
+    _fallbackTimer?.cancel();
+    _fallbackTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!_socketService.isConnected) {
+        checkConnection();
+      }
     });
   }
 
@@ -49,10 +89,7 @@ class ConnectionCubit extends Cubit<ConnectionState> {
   }
 
   Future<void> reconnect() async {
-    emit(state.copyWith(
-      serverStatus: ConnectionStatus.connecting,
-      serverMessage: 'Reconnecting...',
-    ));
+    _socketService.reconnect();
     await checkConnection();
   }
 
@@ -77,7 +114,10 @@ class ConnectionCubit extends Cubit<ConnectionState> {
 
   @override
   Future<void> close() {
-    _checkTimer?.cancel();
+    _fallbackTimer?.cancel();
+    _serverSubscription?.cancel();
+    _androidSubscription?.cancel();
+    _socketService.dispose();
     return super.close();
   }
 }

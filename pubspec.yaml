@@ -16,6 +16,7 @@ dependencies:
   web_socket_channel: ^3.0.2
   flutter_highlight: ^0.7.0
   highlight: ^0.7.0
+  socket_io_client: ^3.0.2
 
 dev_dependencies:
   flutter_test:
