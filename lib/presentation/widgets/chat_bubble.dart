@@ -47,7 +47,7 @@ class ChatBubble extends StatelessWidget {
     return 'plaintext';
   }
 
-  List<Widget> _parseContent(String content) {
+  List<Widget> _parseContent(BuildContext context, String content) {
     final List<Widget> widgets = [];
     final codeBlockRegex = RegExp(r'```(\w*)\n?([\s\S]*?)```');
     int lastEnd = 0;
@@ -56,7 +56,7 @@ class ChatBubble extends StatelessWidget {
       if (match.start > lastEnd) {
         final text = content.substring(lastEnd, match.start).trim();
         if (text.isNotEmpty) {
-          widgets.add(_buildRichText(text));
+          widgets.add(_buildRichText(context, text));
         }
       }
 
@@ -72,24 +72,28 @@ class ChatBubble extends StatelessWidget {
     if (lastEnd < content.length) {
       final text = content.substring(lastEnd).trim();
       if (text.isNotEmpty) {
-        widgets.add(_buildRichText(text));
+        widgets.add(_buildRichText(context, text));
       }
     }
 
     if (widgets.isEmpty && content.isNotEmpty) {
-      widgets.add(_buildRichText(content));
+      widgets.add(_buildRichText(context, content));
     }
 
     return widgets;
   }
 
-  Widget _buildRichText(String text) {
-    final spans = _parseMarkdown(text);
+  Widget _buildRichText(BuildContext context, String text, {bool forceWhite = false}) {
+    final spans = _parseMarkdown(context, text, forceWhite: forceWhite);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = forceWhite 
+        ? Colors.white 
+        : (isDark ? Colors.white : Colors.black87);
     return RichText(
       text: TextSpan(
         children: spans,
-        style: const TextStyle(
-          color: Colors.black87,
+        style: TextStyle(
+          color: textColor,
           height: 1.4,
           fontSize: 15,
         ),
@@ -97,11 +101,16 @@ class ChatBubble extends StatelessWidget {
     );
   }
 
-  List<InlineSpan> _parseMarkdown(String text) {
+  List<InlineSpan> _parseMarkdown(BuildContext context, String text, {bool forceWhite = false}) {
     final List<InlineSpan> spans = [];
     final boldRegex = RegExp(r'\*\*(.+?)\*\*');
     final italicRegex = RegExp(r'_(.+?)_');
     final codeRegex = RegExp(r'`(.+?)`');
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final baseColor = forceWhite ? Colors.white : (isDark ? Colors.white : Colors.black87);
+    final codeBgColor = isDark ? Colors.white.withValues(alpha: 0.1) : Colors.grey.shade200;
+    final codeTextColor = isDark ? Colors.white : Colors.black87;
 
     int lastEnd = 0;
     final allMatches = <_MarkdownMatch>[];
@@ -120,20 +129,20 @@ class ChatBubble extends StatelessWidget {
 
     for (final match in allMatches) {
       if (match.start > lastEnd) {
-        spans.add(TextSpan(text: text.substring(lastEnd, match.start)));
+        spans.add(TextSpan(text: text.substring(lastEnd, match.start), style: TextStyle(color: baseColor)));
       }
 
       switch (match.type) {
         case 'bold':
           spans.add(TextSpan(
             text: match.content,
-            style: const TextStyle(fontWeight: FontWeight.bold),
+            style: TextStyle(fontWeight: FontWeight.bold, color: baseColor),
           ));
           break;
         case 'italic':
           spans.add(TextSpan(
             text: match.content,
-            style: const TextStyle(fontStyle: FontStyle.italic),
+            style: TextStyle(fontStyle: FontStyle.italic, color: baseColor),
           ));
           break;
         case 'code':
@@ -141,8 +150,8 @@ class ChatBubble extends StatelessWidget {
             text: match.content,
             style: TextStyle(
               fontFamily: 'monospace',
-              backgroundColor: Colors.grey.shade200,
-              color: Colors.black87,
+              backgroundColor: codeBgColor,
+              color: codeTextColor,
             ),
           ));
           break;
@@ -152,11 +161,11 @@ class ChatBubble extends StatelessWidget {
     }
 
     if (lastEnd < text.length) {
-      spans.add(TextSpan(text: text.substring(lastEnd)));
+      spans.add(TextSpan(text: text.substring(lastEnd), style: TextStyle(color: baseColor)));
     }
 
     if (spans.isEmpty) {
-      spans.add(TextSpan(text: text));
+      spans.add(TextSpan(text: text, style: TextStyle(color: baseColor)));
     }
 
     return spans;
@@ -233,9 +242,11 @@ class ChatBubble extends StatelessWidget {
     }
 
     final isUser = message.isUser;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final forceWhite = isUser ? !isDark : isDark;
     final contentWidgets = isUser 
-        ? [_buildRichText(message.content)]
-        : _parseContent(message.content);
+        ? [_buildRichText(context, message.content, forceWhite: forceWhite)]
+        : _parseContent(context, message.content);
 
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
@@ -249,7 +260,9 @@ class ChatBubble extends StatelessWidget {
           ),
           decoration: BoxDecoration(
             color: isUser
-                ? Theme.of(context).colorScheme.primary
+                ? (Theme.of(context).brightness == Brightness.dark
+                    ? const Color(0xFF4A3B6B)
+                    : Theme.of(context).colorScheme.primary)
                 : Theme.of(context).colorScheme.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(16),
           ),

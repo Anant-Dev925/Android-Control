@@ -3,12 +3,16 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:android_control/presentation/cubit/chat_cubit.dart';
 import 'package:android_control/presentation/cubit/connection_cubit.dart';
 import 'package:android_control/presentation/cubit/session_cubit.dart';
+import 'package:android_control/core/theme/theme_cubit.dart';
 import 'package:android_control/data/models/chat_message_model.dart';
 import 'package:android_control/data/models/connection_state_model.dart' as conn;
 import 'package:android_control/data/models/session_model.dart';
 import 'package:android_control/presentation/widgets/chat_bubble.dart';
 import 'package:android_control/presentation/widgets/connection_indicator.dart';
 import 'package:android_control/presentation/widgets/quick_actions_bar.dart';
+import 'package:android_control/presentation/widgets/command_menu.dart';
+import 'package:android_control/presentation/pages/settings_page.dart';
+import 'package:android_control/presentation/pages/about_page.dart';
 
 class ChatPage extends StatefulWidget {
   const ChatPage({super.key});
@@ -22,6 +26,7 @@ class _ChatPageState extends State<ChatPage> {
   final ScrollController _scrollController = ScrollController();
   final FocusNode _focusNode = FocusNode();
   bool _welcomeShown = false;
+  bool _showCommandMenu = false;
 
   @override
   void initState() {
@@ -33,6 +38,9 @@ class _ChatPageState extends State<ChatPage> {
 
   void _initSession() async {
     if (!mounted) return;
+    
+    final chatCubit = context.read<ChatCubit>();
+    
     final sessionCubit = context.read<SessionCubit>();
     await sessionCubit.loadSessions();
     
@@ -47,13 +55,15 @@ class _ChatPageState extends State<ChatPage> {
     if (!mounted) return;
     final sessionState = sessionCubit.state;
     if (sessionState.currentSessionId != null) {
-      final chatCubit = context.read<ChatCubit>();
       chatCubit.setSessionId(sessionState.currentSessionId);
       
       if (sessionState.currentMessages.isNotEmpty) {
         chatCubit.loadMessages(sessionState.currentMessages);
       } else {
-        _showWelcome();
+        await chatCubit.loadCachedMessages();
+        if (chatCubit.state.isEmpty) {
+          _showWelcome();
+        }
       }
     }
   }
@@ -82,13 +92,21 @@ class _ChatPageState extends State<ChatPage> {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
     _controller.clear();
+    setState(() => _showCommandMenu = false);
     _focusNode.unfocus();
     context.read<ChatCubit>().sendMessage(text);
     _scrollToBottom();
-    // Refresh sessions list after sending
     Future.delayed(const Duration(milliseconds: 500), () {
       if (mounted) context.read<SessionCubit>().loadSessions();
     });
+  }
+
+  void _showCommandMenu_() {
+    setState(() => _showCommandMenu = true);
+  }
+
+  void _hideCommandMenu_() {
+    setState(() => _showCommandMenu = false);
   }
 
   void _showRenameDialog(SessionModel session) {
@@ -148,9 +166,33 @@ class _ChatPageState extends State<ChatPage> {
                     connectedIcon: Icons.phone_android,
                     disconnectedIcon: Icons.phone_android_outlined,
                   ),
+                  BlocBuilder<ThemeCubit, ThemeState>(
+                    builder: (context, themeState) {
+                      return IconButton(
+                        icon: Icon(
+                          themeState.themeMode == AppThemeMode.dark
+                              ? Icons.light_mode
+                              : Icons.dark_mode,
+                        ),
+                        tooltip: 'Toggle theme',
+                        onPressed: () {
+                          final current = themeState.themeMode;
+                          if (current == AppThemeMode.dark) {
+                            context.read<ThemeCubit>().setThemeMode(AppThemeMode.light);
+                          } else {
+                            context.read<ThemeCubit>().setThemeMode(AppThemeMode.dark);
+                          }
+                        },
+                      );
+                    },
+                  ),
                   IconButton(
-                    icon: const Icon(Icons.refresh),
-                    onPressed: () => context.read<ConnectionCubit>().checkConnection(),
+                    icon: const Icon(Icons.settings),
+                    tooltip: 'Settings',
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const SettingsPage()),
+                    ),
                   ),
                 ],
               );
@@ -270,6 +312,29 @@ class _ChatPageState extends State<ChatPage> {
                           },
                         ),
                 ),
+                const Divider(),
+                ListTile(
+                  leading: const Icon(Icons.settings),
+                  title: const Text('Settings'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const SettingsPage()),
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.info),
+                  title: const Text('About'),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const AboutPage()),
+                    );
+                  },
+                ),
               ],
             );
           },
@@ -277,6 +342,46 @@ class _ChatPageState extends State<ChatPage> {
       ),
       body: Column(
         children: [
+          BlocBuilder<ConnectionCubit, conn.ConnectionState>(
+            builder: (context, state) {
+              if (state.serverStatus != conn.ConnectionStatus.connected) {
+                return Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  color: Theme.of(context).colorScheme.errorContainer,
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.cloud_off,
+                        size: 18,
+                        color: Theme.of(context).colorScheme.onErrorContainer,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Server not connected • ${state.serverMessage}',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.onErrorContainer,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () => context.read<ConnectionCubit>().reconnect(),
+                        child: Text(
+                          'Retry',
+                          style: TextStyle(
+                            color: Theme.of(context).colorScheme.onErrorContainer,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+              return const SizedBox.shrink();
+            },
+          ),
           QuickActionsBar(
             onPasteToChat: (text) {
               _controller.text = text;
@@ -299,13 +404,17 @@ class _ChatPageState extends State<ChatPage> {
               },
             ),
           ),
-          _buildInput(),
+          BlocBuilder<ConnectionCubit, conn.ConnectionState>(
+            builder: (context, state) {
+              return _buildInput(isServerConnected: state.serverStatus == conn.ConnectionStatus.connected);
+            },
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildInput() {
+  Widget _buildInput({bool isServerConnected = true}) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -318,38 +427,194 @@ class _ChatPageState extends State<ChatPage> {
           ),
         ],
       ),
-      child: SafeArea(
-        child: Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _controller,
-                focusNode: _focusNode,
-                decoration: const InputDecoration(
-                  hintText: 'Ask me anything...',
-                  border: OutlineInputBorder(),
-                  contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_showCommandMenu) _buildCommandMenu(),
+          SafeArea(
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _controller,
+                    focusNode: _focusNode,
+                    enabled: isServerConnected,
+                    decoration: InputDecoration(
+                      hintText: isServerConnected ? 'Ask me anything...' : 'Server not connected',
+                      border: const OutlineInputBorder(),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      filled: !isServerConnected,
+                      fillColor: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.5),
+                    ),
+                    textInputAction: TextInputAction.send,
+                    onChanged: (value) {
+                      if (isServerConnected) {
+                        if (value == '/') {
+                          _showCommandMenu_();
+                        } else if (value.isEmpty || !value.startsWith('/')) {
+                          _hideCommandMenu_();
+                        }
+                      }
+                    },
+                    onSubmitted: (_) => _sendMessage(),
+                    maxLines: 5,
+                    minLines: 1,
+                  ),
                 ),
-                textInputAction: TextInputAction.send,
-                onSubmitted: (_) => _sendMessage(),
-                maxLines: 5,
-                minLines: 1,
-              ),
+                const SizedBox(width: 4),
+                IconButton(
+                  icon: const Icon(Icons.terminal),
+                  tooltip: 'Commands',
+                  onPressed: isServerConnected ? _showCommandMenu_ : null,
+                ),
+                const SizedBox(width: 4),
+                BlocBuilder<ChatCubit, List<ChatMessage>>(
+                  builder: (context, messages) {
+                    final isLoading = messages.isNotEmpty && messages.last.isLoading;
+                    return FloatingActionButton(
+                      onPressed: (isServerConnected && !isLoading) ? _sendMessage : null,
+                      child: isLoading
+                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                          : const Icon(Icons.send),
+                    );
+                  },
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            BlocBuilder<ChatCubit, List<ChatMessage>>(
-              builder: (context, messages) {
-                final isLoading = messages.isNotEmpty && messages.last.isLoading;
-                return FloatingActionButton(
-                  onPressed: isLoading ? null : _sendMessage,
-                  child: isLoading
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                      : const Icon(Icons.send),
-                );
-              },
-            ),
-          ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCommandMenu() {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      constraints: const BoxConstraints(maxHeight: 300),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
         ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primaryContainer,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.terminal,
+                  size: 18,
+                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Commands',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                  ),
+                ),
+                const Spacer(),
+                GestureDetector(
+                  onTap: _hideCommandMenu_,
+                  child: Icon(
+                    Icons.close,
+                    size: 18,
+                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Flexible(
+            child: ListView(
+              shrinkWrap: true,
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              children: CommandMenu.commands.map((cmd) {
+                return InkWell(
+                  onTap: () {
+                    _controller.text = cmd.example;
+                    _controller.selection = TextSelection.fromPosition(
+                      TextPosition(offset: cmd.example.length),
+                    );
+                    _hideCommandMenu_();
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.secondaryContainer,
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Icon(
+                            cmd.icon,
+                            size: 16,
+                            color: Theme.of(context).colorScheme.onSecondaryContainer,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                cmd.command,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              Text(
+                                cmd.description,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            cmd.example,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontFamily: 'monospace',
+                              color: Theme.of(context).colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ],
       ),
     );
   }

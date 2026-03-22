@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:android_control/data/models/connection_state_model.dart';
 import 'package:android_control/data/services/api_service.dart';
@@ -10,6 +11,7 @@ class ConnectionCubit extends Cubit<ConnectionState> {
   Timer? _fallbackTimer;
   StreamSubscription<bool>? _serverSubscription;
   StreamSubscription<bool>? _androidSubscription;
+  bool _tailscaleChecked = false;
 
   ConnectionCubit({
     required ApiService apiService,
@@ -24,11 +26,64 @@ class ConnectionCubit extends Cubit<ConnectionState> {
       serverMessage: 'Connecting...',
     ));
 
+    await _ensureTailscaleConnected();
+
     _setupSocketListeners();
 
     await checkConnection();
     
     _startFallbackCheck();
+  }
+
+  Future<void> _ensureTailscaleConnected() async {
+    if (_tailscaleChecked) return;
+    _tailscaleChecked = true;
+
+    final isConnected = await _checkTailscaleStatus();
+    
+    if (!isConnected) {
+      emit(state.copyWith(
+        serverStatus: ConnectionStatus.connecting,
+        serverMessage: 'Opening Tailscale...',
+      ));
+      
+      await _launchTailscale();
+      
+      await Future.delayed(const Duration(seconds: 3));
+    }
+  }
+
+  Future<bool> _checkTailscaleStatus() async {
+    try {
+      final socket = await Socket.connect('100.85.62.80', 3000,
+          timeout: const Duration(seconds: 2));
+      socket.destroy();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _launchTailscale() async {
+    try {
+      if (Platform.isAndroid) {
+        await Process.run('am', [
+          'start',
+          '-n', 'com.tailscale.ipn/.MainActivity',
+          '-a', 'android.intent.action.VIEW'
+        ]);
+      }
+    } catch (_) {
+      try {
+        await Process.run('am', [
+          'start',
+          '-a', 'android.intent.action.VIEW',
+          '-d', 'tailscale://connect'
+        ]);
+      } catch (_) {
+        // Silently fail if Tailscale isn't installed
+      }
+    }
   }
 
   void _setupSocketListeners() {
